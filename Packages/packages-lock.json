@@ -1,8 +1,17 @@
 {
   "dependencies": {
+    "com.tivadar.best.http": {
+      "version": "file:com.tivadar.best.http",
+      "depth": 0,
+      "source": "embedded",
+      "dependencies": {
+        "com.unity.burst": "1.8.23",
+        "com.unity.profiling.core": "1.0.0"
+      }
+    },
     "com.unity.burst": {
       "version": "1.8.24",
-      "depth": 2,
+      "depth": 1,
       "source": "registry",
       "dependencies": {
         "com.unity.mathematics": "1.2.1",
@@ -63,6 +72,13 @@
     "com.unity.nuget.mono-cecil": {
       "version": "1.11.5",
       "depth": 3,
+      "source": "registry",
+      "dependencies": {},
+      "url": "https://packages.unity.com"
+    },
+    "com.unity.profiling.core": {
+      "version": "1.0.2",
+      "depth": 1,
       "source": "registry",
       "dependencies": {},
       "url": "https://packages.unity.com"
