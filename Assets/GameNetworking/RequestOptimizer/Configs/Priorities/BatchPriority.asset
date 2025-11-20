@@ -1,0 +1,21 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: d1d6841ca0ccb404e8a98807a663d585, type: 3}
+  m_Name: BatchPriority
+  m_EditorClassIdentifier: Assembly-CSharp::GameNetworking.RequestOptimizer.Configuration.RequestConfig
+  priority: 4
+  canBatch: 1
+  maxBatchSize: 20
+  maxBatchDelay: 12
+  bypassRateLimit: 1
+  maxRetries: 10
+  retryDelay: 2

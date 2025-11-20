@@ -89,7 +89,7 @@ namespace GameNetworking.OnlineChecking
             }
         }
 
-        protected virtual void Dispose(bool disposing)
+        private void Dispose(bool disposing)
         {
             if (this._isDisposed)
                 return;
