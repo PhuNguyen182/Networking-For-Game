@@ -1,339 +1,318 @@
 # Quick Start Guide
 
-Hướng dẫn nhanh để bắt đầu sử dụng Web Request Service trong 5 phút.
+## 🎯 Installation
 
-## 📦 Installation
+1. Import **Best HTTP** package
+2. Import **Newtonsoft.Json** package
+3. Import **UniTask** package
+4. Copy `GameWebRequestService` folder vào project
 
-### Bước 1: Kiểm tra Dependencies
+---
 
-Đảm bảo project có các packages sau:
+## 🚀 Basic Usage
 
-- ✅ **Best HTTP** - HTTP client library
-- ✅ **UniTask** - Zero-allocation async/await
-- ✅ **TypeFactory** - High-performance object creation (đã có trong project)
-
-### Bước 2: Import WebRequestService
-
-Folder `WebRequestService` đã sẵn sàng tại:
-```
-Assets/GameNetworking/WebRequestService/
-```
-
-## 🚀 Basic Setup (30 giây)
-
-### 1. Tạo Service Instance
+### Step 1: Define Response Data
 
 ```csharp
-using PracticalModules.WebRequestService.Core;
-using PracticalModules.WebRequestService.Models;
+using System;
 
-public class MyGameManager : MonoBehaviour
+[Serializable]
+public class UserData
+{
+    public string userId;
+    public string username;
+    public string email;
+    public int level;
+}
+```
+
+### Step 2: Create Response Class
+
+```csharp
+using GameNetworking.GameWebRequestService.Attributes;
+using GameNetworking.GameWebRequestService.Models;
+using UnityEngine;
+
+[Endpoint("/api/v1/user/profile", "Get User Profile")]
+public class ProfileGetResponse : BaseGetResponse<UserData>
+{
+    public override void OnResponseSuccess(UserData result)
+    {
+        Debug.Log($"✅ Success! Username: {result.username}");
+        Debug.Log($"✅ Email: {result.email}");
+        Debug.Log($"✅ Level: {result.level}");
+    }
+    
+    public override void OnResponseFailed(int errorCode, string errorMessage)
+    {
+        Debug.LogError($"❌ Failed! Code: {errorCode}");
+        Debug.LogError($"❌ Message: {errorMessage}");
+        
+        switch (errorCode)
+        {
+            case 401:
+                Debug.LogError("❌ Unauthorized - please login");
+                break;
+            case 404:
+                Debug.LogError("❌ User not found");
+                break;
+            default:
+                Debug.LogError($"❌ Unexpected error");
+                break;
+        }
+    }
+}
+```
+
+### Step 3: Initialize Service
+
+```csharp
+using GameNetworking.GameWebRequestService.Core;
+using GameNetworking.GameWebRequestService.Models;
+using UnityEngine;
+
+public class GameManager : MonoBehaviour
 {
     private WebRequestService webRequestService;
     
     void Start()
     {
-        // Tạo config
+        // Create config
         var config = new WebRequestConfig
         {
-            baseUrl = "https://your-api.com",  // ⚠️ Thay bằng API URL của bạn
+            baseUrl = "https://api.example.com",
             defaultTimeoutMs = 30000,
             enableLogging = true
         };
         
-        // Khởi tạo service
-        this.webRequestService = new WebRequestService(config);
+        // Initialize service
+        webRequestService = new WebRequestService(config);
         
-        Debug.Log("WebRequestService ready!");
+        Debug.Log("✅ Web Request Service initialized");
     }
 }
 ```
 
-## 📝 Create Models (2 phút)
-
-### Request Model
+### Step 4: Make Request
 
 ```csharp
-using System;
+using System.Threading;
+using Cysharp.Threading.Tasks;
 
+public class GameManager : MonoBehaviour
+{
+    private WebRequestService webRequestService;
+    private CancellationTokenSource cancellationTokenSource;
+    
+    public async UniTaskVoid GetUserProfile()
+    {
+        cancellationTokenSource = new CancellationTokenSource();
+        
+        try
+        {
+            // Make GET request (requestBody = null)
+            var response = await webRequestService.GetAsync<object, ProfileGetResponse>(
+                requestBody: null,
+                cancellationToken: cancellationTokenSource.Token
+            );
+            
+            // Process response (automatically calls OnResponseSuccess or OnResponseFailed)
+            response?.ProcessResponse();
+        }
+        catch (System.OperationCanceledException)
+        {
+            Debug.LogWarning("⚠️ Request cancelled");
+        }
+        catch (System.Exception ex)
+        {
+            Debug.LogError($"❌ Exception: {ex.Message}");
+        }
+        finally
+        {
+            cancellationTokenSource?.Dispose();
+            cancellationTokenSource = null;
+        }
+    }
+    
+    void OnDestroy()
+    {
+        cancellationTokenSource?.Cancel();
+        cancellationTokenSource?.Dispose();
+    }
+}
+```
+
+---
+
+## 📝 POST Request Example
+
+### Step 1: Create Request Model
+
+```csharp
 [Serializable]
 public class LoginRequest
 {
     public string username;
     public string password;
+    public string deviceId;
 }
 ```
 
-### Response Model
+### Step 2: Create Response Data
 
 ```csharp
-using System;
-using PracticalModules.WebRequestService.Attributes;
-using PracticalModules.WebRequestService.Models;
-
-[Endpoint("/api/auth/login", "Login API")]
 [Serializable]
-public class LoginResponse : BaseResponse
+public class LoginData
 {
     public string token;
-    public string userId;
+    public string refreshToken;
+    public UserData userData;
+    public long expiresAt;
+}
+```
+
+### Step 3: Create Response Class
+
+```csharp
+[Endpoint("/api/v1/auth/login", "User Login")]
+public class LoginResponse : BasePostResponse<LoginData>
+{
+    public override void OnResponseSuccess(LoginData result)
+    {
+        // Save tokens
+        PlayerPrefs.SetString("auth_token", result.token);
+        PlayerPrefs.SetString("refresh_token", result.refreshToken);
+        PlayerPrefs.Save();
+        
+        Debug.Log($"✅ Login successful! Welcome {result.userData.username}");
+    }
     
-    public override void OnReturnToPool()
+    public override void OnResponseFailed(int errorCode, string errorMessage)
     {
-        base.OnReturnToPool();
-        this.token = null;
-        this.userId = null;
+        Debug.LogError($"❌ Login failed: {errorCode} - {errorMessage}");
     }
 }
 ```
 
-## 🎯 Make Your First Request (1 phút)
-
-### GET Request
+### Step 4: Make POST Request
 
 ```csharp
-using Cysharp.Threading.Tasks;
-
-public async UniTaskVoid GetUserProfile()
+public async UniTaskVoid Login(string username, string password)
 {
-    try
+    var requestBody = new LoginRequest
     {
-        var response = await this.webRequestService.GetAsync<LoginResponse>(
-            url: "/api/user/profile"
-        );
-        
-        if (response != null && response.IsSuccess)
-        {
-            Debug.Log($"Success! Token: {response.token}");
-        }
-    }
-    catch (Exception ex)
-    {
-        Debug.LogError($"Error: {ex.Message}");
-    }
-}
-```
-
-### POST Request
-
-```csharp
-public async UniTaskVoid Login()
-{
-    try
-    {
-        var request = new LoginRequest
-        {
-            username = "testuser",
-            password = "testpass"
-        };
-        
-        var response = await this.webRequestService.PostAsync<LoginRequest, LoginResponse>(
-            url: "/api/auth/login",
-            requestBody: request
-        );
-        
-        if (response != null && response.IsSuccess)
-        {
-            Debug.Log($"Login successful! Token: {response.token}");
-            // Save token
-            PlayerPrefs.SetString("auth_token", response.token);
-        }
-    }
-    catch (Exception ex)
-    {
-        Debug.LogError($"Login failed: {ex.Message}");
-    }
-}
-```
-
-### PUT Request
-
-```csharp
-public async UniTaskVoid UpdateProfile()
-{
-    try
-    {
-        var request = new UpdateProfileRequest
-        {
-            username = "newname",
-            email = "new@email.com"
-        };
-        
-        var response = await this.webRequestService.PutAsync<UpdateProfileRequest, LoginResponse>(
-            url: "/api/user/profile",
-            requestBody: request
-        );
-        
-        if (response != null && response.IsSuccess)
-        {
-            Debug.Log("Profile updated!");
-        }
-    }
-    catch (Exception ex)
-    {
-        Debug.LogError($"Update failed: {ex.Message}");
-    }
-}
-```
-
-## 🔐 Add Authentication (30 giây)
-
-```csharp
-using System.Collections.Generic;
-
-public async UniTaskVoid AuthenticatedRequest()
-{
-    var headers = new Dictionary<string, string>
-    {
-        { "Authorization", $"Bearer {PlayerPrefs.GetString("auth_token")}" }
+        username = username,
+        password = password,
+        deviceId = SystemInfo.deviceUniqueIdentifier
     };
     
-    var response = await this.webRequestService.GetAsync<LoginResponse>(
-        url: "/api/protected/resource",
-        headers: headers
+    var response = await webRequestService.PostAsync<LoginRequest, LoginResponse>(
+        requestBody: requestBody,
+        cancellationToken: cancellationTokenSource.Token
     );
     
-    // Process response...
+    response?.ProcessResponse();
 }
 ```
 
-## 🎮 In Unity Editor
+---
 
-### 1. Attach Script to GameObject
-
-```
-1. Create empty GameObject: "GameManager"
-2. Add Component → MyGameManager
-3. Press Play
-```
-
-### 2. Test from Inspector
+## 🔧 Configuration Options
 
 ```csharp
-// Add buttons in Inspector
-[SerializeField] private Button loginButton;
-[SerializeField] private Button profileButton;
-
-void Start()
+var config = new WebRequestConfig
 {
-    this.loginButton.onClick.AddListener(() => this.Login().Forget());
-    this.profileButton.onClick.AddListener(() => this.GetUserProfile().Forget());
-}
+    // Required
+    baseUrl = "https://api.example.com",
+    
+    // Optional
+    defaultTimeoutMs = 30000,           // 30 seconds (default)
+    maxRetries = 3,                     // Retry 3 times
+    retryDelayMs = 1000,                // 1 second delay
+    useExponentialBackoff = true,       // Enable backoff
+    enableLogging = true,               // Debug logs
+    logRequestBody = false,             // Don't log passwords!
+    logResponseBody = true              // Log responses
+};
 ```
 
-## ✅ Success Checklist
-
-Sau 5 phút, bạn đã có:
-
-- [x] Service đã setup
-- [x] Config đã tạo
-- [x] Models đã define
-- [x] First request thành công
-- [x] Hiểu cách dùng GET, POST, PUT
-- [x] Biết cách add authentication
-
-## 🎯 Next Steps
-
-### Học thêm tính năng advanced:
-
-1. **Cancellation**
-   ```csharp
-   private CancellationTokenSource cts = new CancellationTokenSource();
-   
-   await service.GetAsync<Response>(url, cancellationToken: cts.Token);
-   
-   // Cancel
-   cts.Cancel();
-   ```
-
-2. **Error Handling**
-   ```csharp
-   if (response == null || !response.IsSuccess)
-   {
-       Debug.LogError($"Failed: Status {response?.statusCode}");
-       return;
-   }
-   ```
-
-3. **Object Pooling**
-   ```csharp
-   // Automatic! Service handles pooling internally
-   ```
-
-## 📚 More Resources
-
-- **README.md** - Complete user guide
-- **ARCHITECTURE.md** - Design documentation
-- **Examples/** - Working code samples
-- **Tests/** - Test examples
+---
 
 ## 💡 Tips
 
-### ✅ DO's
+### Use ProcessResponse() for Automatic Handling
 
-- ✅ Use try-catch cho all requests
-- ✅ Check `response.IsSuccess` before processing
-- ✅ Dispose CancellationTokenSource
-- ✅ Enable logging khi debug: `config.enableLogging = true`
-
-### ❌ DON'Ts
-
-- ❌ Không log sensitive data (passwords, tokens)
-- ❌ Không block main thread
-- ❌ Không forget to cleanup resources
-- ❌ Không hardcode URLs (use config)
-
-## 🐛 Troubleshooting
-
-### Issue: Request không hoạt động
-
-**Solution:**
 ```csharp
-// 1. Check baseUrl
-config.baseUrl = "https://your-api.com";  // No trailing slash
+// ✅ Recommended - automatic callback
+var response = await service.GetAsync<object, UserResponse>(null);
+response?.ProcessResponse(); // Calls OnResponseSuccess or OnResponseFailed
 
-// 2. Enable logging
-config.enableLogging = true;
-
-// 3. Check Unity Console for errors
-```
-
-### Issue: Parse error
-
-**Solution:**
-```csharp
-// Ensure response model matches JSON
-[Serializable]
-public class MyResponse : BaseResponse
+// ⚠️ Manual handling - only if you need custom logic
+var response = await service.GetAsync<object, UserResponse>(null);
+if (response != null)
 {
-    public string fieldName;  // Must match JSON key
+    if (response.IsSuccess && response.data != null)
+    {
+        // Custom success logic
+        response.OnResponseSuccess(response.data);
+    }
+    else
+    {
+        // Custom error logic
+        response.OnResponseFailed(response.statusCode, response.message);
+    }
 }
-
-// Enable response logging to see actual JSON
-config.logResponseBody = true;
 ```
 
-### Issue: Timeout
+### Always Clean Up
 
-**Solution:**
 ```csharp
-// Increase timeout
-config.defaultTimeoutMs = 60000;  // 60 seconds
-
-// Or use EndpointAttribute for specific endpoint
-[Endpoint("/slow-api", "Slow API", TimeoutMilliseconds = 120000)]
-public class SlowResponse : BaseResponse { }
+void OnDestroy()
+{
+    // Cancel pending requests
+    cancellationTokenSource?.Cancel();
+    cancellationTokenSource?.Dispose();
+    
+    // Clear pools (optional)
+    webRequestService?.ClearAllResponsePools();
+}
 ```
 
-## 🎉 You're Ready!
+---
 
-Bây giờ bạn đã sẵn sàng sử dụng Web Request Service! 
+## 🐛 Common Issues
 
-Nếu cần help:
-1. Check **README.md** cho detailed guide
-2. Check **Examples/** cho working code
-3. Check **Tests/** cho test examples
-4. Check **ARCHITECTURE.md** cho design details
+### Issue 1: "Type does not have EndpointAttribute"
 
-Happy coding! 🚀
+**Fix**: Add `[Endpoint]` attribute to your response class
 
+```csharp
+[Endpoint("/api/v1/users", "Get User")] // Add this!
+public class UserResponse : BaseGetResponse<UserData> { }
+```
+
+### Issue 2: "Cannot create instance of abstract class"
+
+**Fix**: Implement `OnResponseSuccess` và `OnResponseFailed`
+
+```csharp
+public class UserResponse : BaseGetResponse<UserData>
+{
+    // Must implement these!
+    public override void OnResponseSuccess(UserData result) { }
+    public override void OnResponseFailed(int errorCode, string errorMessage) { }
+}
+```
+
+---
+
+## 📚 Next Steps
+
+1. ✅ Check **[README.md](README.md)** for complete documentation
+2. ✅ See **[QUICK_REFERENCE.md](QUICK_REFERENCE.md)** for API reference
+3. ✅ Browse **Examples/** folder for more examples
+4. ✅ Read **[NEW_ARCHITECTURE.md](NEW_ARCHITECTURE.md)** for architecture details
+
+---
+
+**Happy Coding!** 🚀

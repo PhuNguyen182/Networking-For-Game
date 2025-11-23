@@ -1,233 +1,108 @@
-# Quick Reference Guide - v2.1.0
+# Quick Reference - Game Web Request Service v2.1.0
 
-## 🆕 What's New in v2.1.0
-
-- ✅ **GET Request Body Support**: GET requests có thể truyền requestBody (optional)
-- ✅ **Newtonsoft.Json**: Replaced JsonUtility với Json.NET cho better features
-- ✅ **Complex Types**: Support Dictionary, custom converters, attributes
-- ⚠️ **Breaking Change**: GET API signature changed (thêm TRequest parameter)
-
----
-
-## 🚀 Fast Start
-
-### 1. Create Response Class
+## 🚀 Quick Start
 
 ```csharp
-using PracticalModules.WebRequestService.Attributes;
-using PracticalModules.WebRequestService.Models;
-
-// Define response data structure
-[Serializable]
-public class UserData
-{
-    public string userId;
-    public string username;
-    public string email;
-}
-
-// Create response class với EndpointAttribute
+// 1. Define response
 [Endpoint("/api/v1/users", "Get User")]
-public class UserGetResponse : BaseGetResponse<UserData>
+public class UserResponse : BaseGetResponse<UserData>
 {
-    public override void OnResponseSuccess(UserData result)
+    public override void OnResponseSuccess(UserData result) 
     {
         Debug.Log($"User: {result.username}");
     }
     
-    public override void OnResponseFailed(int errorCode, string errorMessage)
+    public override void OnResponseFailed(int errorCode, string errorMessage) 
     {
-        Debug.LogError($"Failed: {errorCode} - {errorMessage}");
+        Debug.LogError($"Error: {errorCode}");
     }
 }
-```
 
-### 2. Make Request
-
-```csharp
-// Initialize service (once)
+// 2. Initialize service
 var config = new WebRequestConfig { baseUrl = "https://api.example.com" };
-var webRequestService = new WebRequestService(config);
+var service = new WebRequestService(config);
 
-// Make GET request
-var response = await webRequestService.GetAsync<UserGetResponse>();
-response?.ProcessResponse(); // Tự động gọi OnResponseSuccess hoặc OnResponseFailed
+// 3. Make request
+var response = await service.GetAsync<object, UserResponse>(requestBody: null);
+response?.ProcessResponse();
 ```
 
 ---
 
-## 📋 Cheat Sheet
+## 📋 API Cheat Sheet
 
 ### GET Request
 
 ```csharp
-// Response class
-[Endpoint("/api/v1/resource", "Get Resource")]
-public class GetResponse : BaseGetResponse<DataType>
-{
-    public override void OnResponseSuccess(DataType result) { }
-    public override void OnResponseFailed(int errorCode, string errorMessage) { }
-}
-
-// Usage - Without body (truyền null)
-var response = await webRequestService.GetAsync<object, GetResponse>(
-    requestBody: null
+// Without body
+var response = await service.GetAsync<object, UserResponse>(
+    requestBody: null,
+    cancellationToken: token
 );
-response?.ProcessResponse();
 
-// Usage - With body (optional)
-var response = await webRequestService.GetAsync<GetRequest, GetResponse>(
-    requestBody: new GetRequest { /* data */ }
+// With body
+var response = await service.GetAsync<GetRequest, UserResponse>(
+    requestBody: new GetRequest { /* data */ },
+    cancellationToken: token
 );
-response?.ProcessResponse();
 ```
 
 ### POST Request
 
 ```csharp
-// Response class
-[Endpoint("/api/v1/resource", "Create Resource")]
-public class PostResponse : BasePostResponse<DataType>
-{
-    public override void OnResponseSuccess(DataType result) { }
-    public override void OnResponseFailed(int errorCode, string errorMessage) { }
-}
-
-// Request model
-[Serializable]
-public class CreateRequest
-{
-    public string name;
-    public int value;
-}
-
-// Usage
-var requestBody = new CreateRequest { name = "test", value = 123 };
-var response = await webRequestService.PostAsync<CreateRequest, PostResponse>(requestBody);
-response?.ProcessResponse();
+var response = await service.PostAsync<LoginRequest, LoginResponse>(
+    requestBody: new LoginRequest { username = "test", password = "test123" },
+    cancellationToken: token
+);
 ```
 
 ### PUT Request
 
 ```csharp
-// Response class
-[Endpoint("/api/v1/resource", "Update Resource")]
-public class PutResponse : BasePutResponse<DataType>
-{
-    public override void OnResponseSuccess(DataType result) { }
-    public override void OnResponseFailed(int errorCode, string errorMessage) { }
-}
-
-// Request model
-[Serializable]
-public class UpdateRequest
-{
-    public string name;
-    public int value;
-}
-
-// Usage
-var requestBody = new UpdateRequest { name = "updated", value = 456 };
-var response = await webRequestService.PutAsync<UpdateRequest, PutResponse>(requestBody);
-response?.ProcessResponse();
+var response = await service.PutAsync<UpdateRequest, UpdateResponse>(
+    requestBody: new UpdateRequest { /* data */ },
+    cancellationToken: token
+);
 ```
 
 ---
 
-## 🎯 Common Patterns
+## 🎯 Response Types
 
-### Manual Error Handling
-
-```csharp
-var response = await webRequestService.GetAsync<UserGetResponse>();
-
-if (response != null)
-{
-    if (response.IsSuccess && response.data != null)
-    {
-        // Custom success logic
-        response.OnResponseSuccess(response.data);
-    }
-    else
-    {
-        // Custom error logic
-        response.OnResponseFailed(response.statusCode, response.message);
-    }
-}
-```
-
-### Cancellation Support
+### Plain Response
 
 ```csharp
-private CancellationTokenSource cts;
-
-public async UniTaskVoid MakeRequest()
-{
-    cts = new CancellationTokenSource();
-    
-    try
-    {
-        var response = await webRequestService.GetAsync<UserGetResponse>(
-            cancellationToken: cts.Token
-        );
-        response?.ProcessResponse();
-    }
-    catch (OperationCanceledException)
-    {
-        Debug.Log("Request cancelled");
-    }
-    finally
-    {
-        cts?.Dispose();
-    }
-}
-
-public void CancelRequest()
-{
-    cts?.Cancel();
-}
-```
-
-### Response Data Mapping
-
-```csharp
-[Serializable]
-public class LoginResponseData
+[Endpoint("/api/v1/login", "Login")]
+public class LoginPlainResponse : BasePlainResponse
 {
     public string token;
-    public string refreshToken;
-    public UserInfo userInfo;
-    public long expiresAt;
+    public UserData userData;
 }
+```
 
+### Generic Response (Recommended)
+
+```csharp
+// 1. Define data structure
 [Serializable]
-public class UserInfo
+public class LoginData
 {
-    public string userId;
-    public string username;
-    public string email;
-    public int level;
+    public string token;
+    public UserData userData;
 }
 
-[Endpoint("/api/v1/auth/login", "Login")]
-public class LoginResponse : BasePostResponse<LoginResponseData>
+// 2. Create response class
+[Endpoint("/api/v1/login", "Login")]
+public class LoginResponse : BasePostResponse<LoginData>
 {
-    public override void OnResponseSuccess(LoginResponseData result)
+    public override void OnResponseSuccess(LoginData result)
     {
-        // Access nested data
         PlayerPrefs.SetString("token", result.token);
-        PlayerPrefs.SetString("user_id", result.userInfo.userId);
-        PlayerPrefs.SetInt("level", result.userInfo.level);
     }
     
     public override void OnResponseFailed(int errorCode, string errorMessage)
     {
-        switch (errorCode)
-        {
-            case 401: Debug.LogError("Invalid credentials"); break;
-            case 403: Debug.LogError("Account locked"); break;
-            default: Debug.LogError($"Error: {errorMessage}"); break;
-        }
+        Debug.LogError($"Login failed: {errorCode}");
     }
 }
 ```
@@ -235,19 +110,6 @@ public class LoginResponse : BasePostResponse<LoginResponseData>
 ---
 
 ## 🔧 Configuration
-
-### Basic Config
-
-```csharp
-var config = new WebRequestConfig
-{
-    baseUrl = "https://api.example.com",
-    defaultTimeoutMs = 30000,
-    enableLogging = true
-};
-```
-
-### Advanced Config
 
 ```csharp
 var config = new WebRequestConfig
@@ -258,83 +120,108 @@ var config = new WebRequestConfig
     retryDelayMs = 1000,
     useExponentialBackoff = true,
     enableLogging = true,
-    logRequestBody = false, // Security: don't log passwords
+    logRequestBody = false,      // Security: don't log passwords
     logResponseBody = true
 };
 ```
 
 ---
 
-## 📊 Response Properties
-
-### Common Properties
+## 📊 HTTP Status Codes
 
 ```csharp
-response.statusCode  // HTTP status code (int)
-response.message     // Server message (string)
-response.timestamp   // Response timestamp (long)
-response.data        // Response data (TResponseData)
-response.IsSuccess   // Success flag (bool)
+using GameNetworking.GameWebRequestService.Constants;
+
+// Common codes
+HttpStatusCode.Success              // 200
+HttpStatusCode.Created              // 201
+HttpStatusCode.BadRequest           // 400
+HttpStatusCode.Unauthorized         // 401
+HttpStatusCode.Forbidden            // 403
+HttpStatusCode.NotFound             // 404
+HttpStatusCode.InternalServerError  // 500
+
+// Utility methods
+HttpStatusCode.IsSuccess(code)
+HttpStatusCode.IsClientError(code)
+HttpStatusCode.IsServerError(code)
+HttpStatusCode.GetDescription(code)
 ```
 
-### Usage
+---
+
+## 🎨 Newtonsoft.Json Attributes
 
 ```csharp
-public override void OnResponseSuccess(UserData result)
+using Newtonsoft.Json;
+
+[Serializable]
+public class UserData
 {
-    Debug.Log($"Status: {this.statusCode}");
-    Debug.Log($"Message: {this.message}");
-    Debug.Log($"Timestamp: {this.timestamp}");
-    Debug.Log($"User: {result.username}");
+    [JsonProperty("user_id")]
+    public string userId;
+    
+    [JsonIgnore]
+    public string internalCache;
+    
+    [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
+    public string optionalField;
 }
 ```
 
 ---
 
-## ⚡ Best Practices
+## ⚡ Common Patterns
 
-### ✅ Do This
+### Cancellation
 
 ```csharp
-// Use EndpointAttribute
-[Endpoint("/api/v1/users", "Get User")]
-public class UserResponse : BaseGetResponse<UserData> { }
+private CancellationTokenSource cts;
 
-// Implement both callbacks
-public override void OnResponseSuccess(UserData result) { }
-public override void OnResponseFailed(int errorCode, string errorMessage) { }
+public async UniTaskVoid MakeRequest()
+{
+    cts = new CancellationTokenSource();
+    
+    try
+    {
+        var response = await service.GetAsync<object, UserResponse>(
+            requestBody: null,
+            cancellationToken: cts.Token
+        );
+        response?.ProcessResponse();
+    }
+    catch (OperationCanceledException)
+    {
+        Debug.Log("Cancelled");
+    }
+    finally
+    {
+        cts?.Dispose();
+    }
+}
 
-// Use ProcessResponse
-response?.ProcessResponse();
-
-// Handle cancellation
-var response = await webRequestService.GetAsync<UserResponse>(cancellationToken);
-
-// Clean up resources
-void OnDestroy()
+public void Cancel()
 {
     cts?.Cancel();
-    cts?.Dispose();
 }
 ```
 
-### ❌ Don't Do This
+### Manual Error Handling
 
 ```csharp
-// Missing EndpointAttribute - sẽ throw exception
-public class UserResponse : BaseGetResponse<UserData> { }
+var response = await service.GetAsync<object, UserResponse>(null);
 
-// Không implement callbacks - compiler error
-public class UserResponse : BaseGetResponse<UserData>
+if (response != null)
 {
-    // Missing OnResponseSuccess and OnResponseFailed
+    if (response.IsSuccess && response.data != null)
+    {
+        response.OnResponseSuccess(response.data);
+    }
+    else
+    {
+        response.OnResponseFailed(response.statusCode, response.message);
+    }
 }
-
-// Hardcode URLs - không linh động
-await webRequestService.GetAsync<UserResponse>("/api/hardcoded/url");
-
-// Không cleanup - memory leak
-// Missing OnDestroy with cancellation cleanup
 ```
 
 ---
@@ -343,33 +230,27 @@ await webRequestService.GetAsync<UserResponse>("/api/hardcoded/url");
 
 ### Error 1: Missing EndpointAttribute
 
-**Error**: `InvalidOperationException: Type 'UserResponse' does not have EndpointAttribute`
-
-**Solution**:
 ```csharp
-[Endpoint("/api/v1/users", "Get User")] // Add this
+// ❌ Error
+public class UserResponse : BaseGetResponse<UserData> { }
+
+// ✅ Fix
+[Endpoint("/api/v1/users", "Get User")]
 public class UserResponse : BaseGetResponse<UserData> { }
 ```
 
-### Error 2: Empty Endpoint Path
+### Error 2: Not Implementing Callbacks
 
-**Error**: `InvalidOperationException: EndpointAttribute but Path is null or empty`
-
-**Solution**:
 ```csharp
-[Endpoint("/api/v1/users", "Get User")] // Provide valid path
-public class UserResponse : BaseGetResponse<UserData> { }
-```
-
-### Error 3: Not Implementing Abstract Methods
-
-**Error**: `Cannot create an instance of the abstract class or interface`
-
-**Solution**:
-```csharp
+// ❌ Error - Compiler will complain
 public class UserResponse : BaseGetResponse<UserData>
 {
-    // Implement both methods
+    // Missing OnResponseSuccess and OnResponseFailed
+}
+
+// ✅ Fix
+public class UserResponse : BaseGetResponse<UserData>
+{
     public override void OnResponseSuccess(UserData result) { }
     public override void OnResponseFailed(int errorCode, string errorMessage) { }
 }
@@ -377,128 +258,51 @@ public class UserResponse : BaseGetResponse<UserData>
 
 ---
 
-## 📚 HTTP Status Codes
+## 💡 Best Practices
 
-### Success (2xx)
+### ✅ Do
 
-```csharp
-HttpStatusCode.OK                  // 200
-HttpStatusCode.Created             // 201
-HttpStatusCode.Accepted            // 202
-HttpStatusCode.NoContent           // 204
-```
+- Use `EndpointAttribute` on all response classes
+- Implement both `OnResponseSuccess` and `OnResponseFailed`
+- Call `ProcessResponse()` for automatic handling
+- Clean up `CancellationTokenSource` in `OnDestroy`
+- Use generic responses (`BaseGetResponse<T>`) for type safety
 
-### Client Errors (4xx)
+### ❌ Don't
 
-```csharp
-HttpStatusCode.BadRequest          // 400
-HttpStatusCode.Unauthorized        // 401
-HttpStatusCode.Forbidden           // 403
-HttpStatusCode.NotFound            // 404
-HttpStatusCode.Conflict            // 409
-HttpStatusCode.TooManyRequests     // 429
-```
+- Forget `EndpointAttribute` (will throw exception)
+- Hardcode URLs (use attributes instead)
+- Skip cancellation token cleanup (memory leak)
+- Use plain responses for new code (use generic instead)
 
-### Server Errors (5xx)
+---
+
+## 🧪 Testing
 
 ```csharp
-HttpStatusCode.InternalServerError // 500
-HttpStatusCode.BadGateway          // 502
-HttpStatusCode.ServiceUnavailable  // 503
-HttpStatusCode.GatewayTimeout      // 504
-```
+using GameNetworking.GameWebRequestService.Tests;
 
-### Usage
+var mockRequest = new MockWebRequest(
+    simulateSuccess: true,
+    simulatedStatusCode: 200,
+    simulatedDelayMs: 100
+);
 
-```csharp
-public override void OnResponseFailed(int errorCode, string errorMessage)
-{
-    if (HttpStatusCode.IsClientError(errorCode))
-    {
-        Debug.LogError($"Client error: {HttpStatusCode.GetDescription(errorCode)}");
-    }
-    else if (HttpStatusCode.IsServerError(errorCode))
-    {
-        Debug.LogError($"Server error: {HttpStatusCode.GetDescription(errorCode)}");
-    }
-}
+var service = new WebRequestService(config, mockRequest);
+var response = await service.GetAsync<object, TestResponse>(null);
 ```
 
 ---
 
-## 🎓 Next Steps
+## 📚 See Also
 
-### Learn More
-1. **MIGRATION_GUIDE.md** - Migrate từ v1.x
-2. **NEW_ARCHITECTURE.md** - Deep dive vào architecture
-3. **README.md** - Complete documentation
-4. **Examples/** - Working code examples
-
-### Advanced Topics
-- Custom error handling strategies
-- Request interceptors
-- Response caching
-- Offline mode support
-- Performance optimization
+- **README.md** - Complete documentation
+- **MIGRATION_GUIDE.md** - Migrate from v1.x to v2.x
+- **NEW_ARCHITECTURE.md** - Architecture details
+- **V2_1_CHANGES.md** - Latest changes
+- **Examples/** - Working code examples
 
 ---
 
-## 💡 Tips & Tricks
-
-### Tip 1: Reuse Response Classes
-
-```csharp
-// Có thể reuse cho multiple endpoints
-[Endpoint("/api/v1/users/{id}", "Get User")]
-public class UserResponse : BaseGetResponse<UserData> { }
-
-// Sau đó có thể extend nếu cần
-[Endpoint("/api/v1/users/me", "Get Current User")]
-public class CurrentUserResponse : UserResponse { }
-```
-
-### Tip 2: Share Data Structures
-
-```csharp
-// Define once, reuse nhiều lần
-[Serializable]
-public class UserData
-{
-    public string userId;
-    public string username;
-}
-
-// Use trong multiple responses
-public class UserGetResponse : BaseGetResponse<UserData> { }
-public class UserUpdateResponse : BasePutResponse<UserData> { }
-```
-
-### Tip 3: Logging Best Practices
-
-```csharp
-public override void OnResponseSuccess(UserData result)
-{
-    #if UNITY_EDITOR || DEVELOPMENT_BUILD
-    Debug.Log($"[{GetType().Name}] Success: {result.username}");
-    #endif
-    
-    // Production code
-    ProcessUserData(result);
-}
-```
-
----
-
-## 🔗 Quick Links
-
-- **GitHub**: [Repository URL]
-- **Documentation**: `Assets/GameNetworking/WebRequestService/`
-- **Examples**: `Assets/GameNetworking/WebRequestService/Examples/`
-- **Issues**: [Issue Tracker URL]
-
----
-
-**Version**: 2.0.0  
-**Last Updated**: November 23, 2024  
-**Status**: ✅ Production Ready
-
+**Version**: 2.1.0  
+**Last Updated**: November 23, 2024
