@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
+using System.Threading;
 using Cysharp.Threading.Tasks;
+using GameNetworking.GameWebRequestService.Core;
 using GameNetworking.RequestOptimizer.Scripts.BatchingStrategies;
 using GameNetworking.RequestOptimizer.Scripts.Configuration;
 using GameNetworking.RequestOptimizer.Scripts.Core;
@@ -17,6 +19,8 @@ namespace GameNetworking.RequestOptimizer.Scripts.Unity
     /// </summary>
     public class RequestQueueManagerBehaviour : MonoBehaviour
     {
+        private OptimizedWebRequestService _optimizedWebRequestService;
+        
         private static RequestQueueManagerBehaviour _instance;
         
         public static RequestQueueManagerBehaviour Instance
@@ -42,7 +46,7 @@ namespace GameNetworking.RequestOptimizer.Scripts.Unity
         [SerializeField] private BatchingStrategyType defaultBatchingStrategy = BatchingStrategyType.Adaptive;
         
         private RequestQueueManager _requestQueueManager;
-        private System.Threading.CancellationTokenSource _lifecycleCts;
+        private CancellationTokenSource _lifecycleCts;
         
         public event Action<QueueStatistics> OnStatisticsUpdated
         {
@@ -158,7 +162,7 @@ namespace GameNetworking.RequestOptimizer.Scripts.Unity
             
             var networkMonitor = new OnlineCheckNetworkMonitor();
             
-            var requestSender = new HttpRequestSender(this.config.maxConcurrentRequests);
+            var requestSender = new HttpRequestSender(this._optimizedWebRequestService.HttpClient);
             
             var offlineStorage = new JsonOfflineQueueStorage(
                 this.config.offlineQueueKey,

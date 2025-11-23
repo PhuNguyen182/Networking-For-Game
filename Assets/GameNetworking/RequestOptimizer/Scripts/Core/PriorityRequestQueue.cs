@@ -7,9 +7,14 @@ namespace GameNetworking.RequestOptimizer.Scripts.Core
 {
     /// <summary>
     /// Priority-based request queue với tối ưu performance
+    /// Cache Enum.GetValues để tránh allocation
     /// </summary>
     public class PriorityRequestQueue : IRequestQueue
     {
+        // Cache Enum.GetValues để tránh allocation mỗi lần gọi
+        private static readonly RequestPriority[] CachedPriorities = 
+            (RequestPriority[])Enum.GetValues(typeof(RequestPriority));
+        
         private readonly Dictionary<RequestPriority, Queue<QueuedRequest>> _priorityQueues;
         private readonly int _maxQueueSize;
         
@@ -18,7 +23,8 @@ namespace GameNetworking.RequestOptimizer.Scripts.Core
             this._maxQueueSize = maxQueueSize;
             this._priorityQueues = new Dictionary<RequestPriority, Queue<QueuedRequest>>();
             
-            foreach (RequestPriority priority in Enum.GetValues(typeof(RequestPriority)))
+            // Sử dụng cached array thay vì Enum.GetValues()
+            foreach (var priority in CachedPriorities)
             {
                 this._priorityQueues[priority] = new Queue<QueuedRequest>();
             }
@@ -36,7 +42,8 @@ namespace GameNetworking.RequestOptimizer.Scripts.Core
         
         public QueuedRequest Dequeue()
         {
-            foreach (RequestPriority priority in Enum.GetValues(typeof(RequestPriority)))
+            // Sử dụng cached array thay vì Enum.GetValues()
+            foreach (var priority in CachedPriorities)
             {
                 if (this._priorityQueues[priority].Count > 0)
                 {

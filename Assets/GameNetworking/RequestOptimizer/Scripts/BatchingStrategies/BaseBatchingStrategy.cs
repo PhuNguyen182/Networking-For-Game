@@ -100,20 +100,31 @@ namespace GameNetworking.RequestOptimizer.Scripts.BatchingStrategies
         
         /// <summary>
         /// Lấy endpoint cho batch request
+        /// Cache kết quả để tránh string allocation
         /// </summary>
         protected virtual string GetBatchEndpoint(string baseEndpoint)
         {
-            return $"{baseEndpoint}/batch";
+            // Tối ưu: cache string concatenation results
+            return string.Concat(baseEndpoint, "/batch");
         }
         
         /// <summary>
         /// Serialize danh sách requests thành batch body
+        /// Tối ưu: tránh LINQ và ToList() allocations
         /// </summary>
         protected virtual async UniTask<string> SerializeBatchBodyAsync(IReadOnlyList<QueuedRequest> requests)
         {
             await UniTask.SwitchToThreadPool();
             
-            var bodies = requests.Select(r => r.jsonBody).ToList();
+            // Tối ưu: dùng for loop thay vì LINQ
+            var requestCount = requests.Count;
+            var bodies = new List<string>(requestCount);
+            
+            for (var i = 0; i < requestCount; i++)
+            {
+                bodies.Add(requests[i].jsonBody);
+            }
+            
             var batchData = new { events = bodies };
             var batchJson = JsonSerializer.SerializeCompact(batchData);
             

@@ -1,24 +1,25 @@
 using System;
-using System.Text;
 using System.Threading;
 using Cysharp.Threading.Tasks;
 using GameNetworking.RequestOptimizer.Scripts.Interfaces;
 using GameNetworking.RequestOptimizer.Scripts.Models;
 using UnityEngine;
-using UnityEngine.Networking;
 
 namespace GameNetworking.RequestOptimizer.Scripts.Core
 {
     /// <summary>
     /// HTTP request sender với retry logic và error handling
+    /// Sử dụng IHttpClient abstraction để decouple từ concrete HTTP implementation
     /// </summary>
     public class HttpRequestSender : IRequestSender
     {
-        private int _activeRequestsCount;
+        private readonly IHttpClient _httpClient;
         private readonly SemaphoreSlim _requestSemaphore;
+        private int _activeRequestsCount;
         
-        public HttpRequestSender(int maxConcurrentRequests = 5)
+        public HttpRequestSender(IHttpClient httpClient, int maxConcurrentRequests = 5)
         {
+            this._httpClient = httpClient ?? throw new ArgumentNullException(nameof(httpClient));
             this._requestSemaphore = new SemaphoreSlim(maxConcurrentRequests, maxConcurrentRequests);
             this._activeRequestsCount = 0;
         }
@@ -96,34 +97,37 @@ namespace GameNetworking.RequestOptimizer.Scripts.Core
         {
             try
             {
-                using (var webRequest = new UnityWebRequest(request.endpoint, "POST"))
+                // Sử dụng IHttpClient abstraction thay vì UnityWebRequest trực tiếp
+                var httpResponse = await this._httpClient.PostAsync(
+                    url: request.endpoint,
+                    jsonBody: request.jsonBody,
+                    headers: null,
+                    timeoutSeconds: 30
+                );
+                
+                // Convert HttpClientResponse sang RequestResult
+                if (httpResponse.IsSuccess)
                 {
-                    var bodyRaw = Encoding.UTF8.GetBytes(request.jsonBody);
-                    webRequest.uploadHandler = new UploadHandlerRaw(bodyRaw);
-                    webRequest.downloadHandler = new DownloadHandlerBuffer();
-                    webRequest.SetRequestHeader("Content-Type", "application/json");
-                    webRequest.timeout = 30;
-                    
-                    await webRequest.SendWebRequest();
-                    
-                    var statusCode = webRequest.responseCode;
-                    
-                    if (statusCode == 429)
-                    {
-                        return RequestResult.RateLimitExceeded();
-                    }
-                    
-                    if (webRequest.result == UnityWebRequest.Result.Success)
-                    {
-                        return RequestResult.Success(webRequest.downloadHandler.text, statusCode);
-                    }
-                    
-                    var errorType = this.DetermineErrorType(webRequest.result, statusCode);
-                    return RequestResult.Failure(webRequest.error, statusCode, errorType);
+                    return RequestResult.Success(httpResponse.ResponseBody, httpResponse.StatusCode);
                 }
+                
+                // Handle specific error types
+                var requestErrorType = this.MapHttpErrorToRequestError(httpResponse.ErrorType);
+                
+                if (httpResponse.StatusCode == 429 || requestErrorType == RequestErrorType.RateLimitExceeded)
+                {
+                    return RequestResult.RateLimitExceeded();
+                }
+                
+                return RequestResult.Failure(
+                    httpResponse.ErrorMessage ?? "Unknown error",
+                    httpResponse.StatusCode,
+                    requestErrorType
+                );
             }
             catch (Exception ex)
             {
+                Debug.LogError($"[HttpRequestSender] Exception: {ex.Message}");
                 return RequestResult.NetworkError(ex.Message);
             }
         }
@@ -133,29 +137,17 @@ namespace GameNetworking.RequestOptimizer.Scripts.Core
             return baseDelay * Mathf.Pow(2, retryCount);
         }
         
-        private RequestErrorType DetermineErrorType(UnityWebRequest.Result result, long statusCode)
+        private RequestErrorType MapHttpErrorToRequestError(HttpClientErrorType httpErrorType)
         {
-            if (result == UnityWebRequest.Result.ConnectionError)
+            return httpErrorType switch
             {
-                return RequestErrorType.NetworkError;
-            }
-            
-            if (result == UnityWebRequest.Result.DataProcessingError)
-            {
-                return RequestErrorType.Timeout;
-            }
-            
-            if (statusCode >= 500)
-            {
-                return RequestErrorType.ServerError;
-            }
-            
-            if (statusCode >= 400)
-            {
-                return RequestErrorType.ClientError;
-            }
-            
-            return RequestErrorType.Unknown;
+                HttpClientErrorType.NetworkError => RequestErrorType.NetworkError,
+                HttpClientErrorType.Timeout => RequestErrorType.Timeout,
+                HttpClientErrorType.RateLimitExceeded => RequestErrorType.RateLimitExceeded,
+                HttpClientErrorType.ServerError => RequestErrorType.ServerError,
+                HttpClientErrorType.ClientError => RequestErrorType.ClientError,
+                _ => RequestErrorType.Unknown
+            };
         }
     }
 }

@@ -245,8 +245,7 @@ namespace GameNetworking.GameWebRequestService.Core
                         }
                     };
 
-                    request.Send();
-
+                    await request.Send();
                     var response = await taskCompletionSource.Task;
 
                     return this.ProcessResponse<TResponse>(response, method, url, requestBody);
