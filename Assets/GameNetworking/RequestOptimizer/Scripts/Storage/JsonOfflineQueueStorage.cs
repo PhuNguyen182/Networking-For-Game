@@ -107,6 +107,7 @@ namespace GameNetworking.RequestOptimizer.Scripts.Storage
                         var request = new QueuedRequest(
                             serializableRequest.endpoint,
                             serializableRequest.jsonBody,
+                            serializableRequest.httpMethod,
                             serializableRequest.priority,
                             config,
                             serializableRequest.requestId,

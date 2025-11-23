@@ -12,6 +12,7 @@ namespace GameNetworking.RequestOptimizer.Scripts.Models
         public string endpoint;
         public string jsonBody;
         public RequestPriority priority;
+        public string httpMethod;
         public string requestId;
         public float queuedTime;
         public int retryCount;
@@ -21,6 +22,7 @@ namespace GameNetworking.RequestOptimizer.Scripts.Models
             this.endpoint = request.endpoint;
             this.jsonBody = request.jsonBody;
             this.priority = request.priority;
+            this.httpMethod = request.httpMethod;
             this.requestId = request.requestId;
             this.queuedTime = request.queuedTime;
             this.retryCount = request.retryCount;

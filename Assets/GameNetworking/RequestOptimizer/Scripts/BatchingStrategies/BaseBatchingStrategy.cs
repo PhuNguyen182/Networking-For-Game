@@ -64,11 +64,13 @@ namespace GameNetworking.RequestOptimizer.Scripts.BatchingStrategies
             
             var batchEndpoint = this.GetBatchEndpoint(requests[0].endpoint);
             var batchBody = await this.SerializeBatchBodyAsync(requests);
+            var httpMethod = requests[0].httpMethod;
             var firstRequest = requests[0];
             
             var batchRequest = new QueuedRequest(
                 batchEndpoint,
                 batchBody,
+                httpMethod,
                 firstRequest.priority,
                 firstRequest.config
             );

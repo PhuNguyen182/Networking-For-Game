@@ -69,11 +69,13 @@ namespace GameNetworking.RequestOptimizer.Scripts.MergingStrategies
             var mergedJson = await this.MergeJsonBodiesAsync(requests);
             
             // Lấy properties từ request cuối cùng (highest priority)
-            var lastRequest = requests[requests.Count - 1];
+            var lastRequest = requests[^1];
+            var httpMethod = lastRequest.httpMethod;
             
             var mergedRequest = new QueuedRequest(
                 lastRequest.endpoint,
                 mergedJson,
+                httpMethod,
                 lastRequest.priority,
                 lastRequest.config
             );

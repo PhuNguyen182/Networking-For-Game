@@ -23,6 +23,7 @@ namespace GameNetworking.RequestOptimizer.Scripts.Core
         private readonly IOfflineQueueStorage _offlineQueueStorage;
         private readonly RequestQueueManagerConfig _requestQueueManagerConfig;
         private readonly Dictionary<string, IBatchingStrategy> _batchingStrategies;
+        private readonly Dictionary<RequestPriority, IBatchingStrategy> _priorityBatchingStrategies;
         
         private readonly Dictionary<string, List<QueuedRequest>> _batchBuffers;
         private readonly Dictionary<string, float> _batchTimers;
@@ -49,6 +50,7 @@ namespace GameNetworking.RequestOptimizer.Scripts.Core
             this._requestSender = requestSender ?? throw new ArgumentNullException(nameof(requestSender));
             this._offlineQueueStorage = offlineStorage ?? throw new ArgumentNullException(nameof(offlineStorage));
             this._batchingStrategies = batchingStrategies ?? new Dictionary<string, IBatchingStrategy>();
+            this._priorityBatchingStrategies = new Dictionary<RequestPriority, IBatchingStrategy>();
             
             this._batchBuffers = new Dictionary<string, List<QueuedRequest>>();
             this._batchTimers = new Dictionary<string, float>();
@@ -77,20 +79,20 @@ namespace GameNetworking.RequestOptimizer.Scripts.Core
         /// <summary>
         /// Enqueue request với automatic JSON serialization
         /// </summary>
-        public void EnqueueRequest(string endpoint, object data, RequestConfig config,
+        public void EnqueueRequest(string endpoint, object data, string httpMethod, RequestConfig config,
             Action<bool, string> callback = null)
         {
             var jsonBody = JsonSerializer.SerializeCompact(data);
-            this.EnqueueRequestRaw(endpoint, jsonBody, config, callback);
+            this.EnqueueRequestRaw(endpoint, jsonBody, httpMethod, config, callback);
         }
         
         /// <summary>
         /// Enqueue request với pre-serialized JSON
         /// </summary>
-        public void EnqueueRequestRaw(string endpoint, string jsonBody, RequestConfig config,
+        public void EnqueueRequestRaw(string endpoint, string jsonBody, string httpMethod, RequestConfig config,
             Action<bool, string> callback = null)
         {
-            var request = new QueuedRequest(endpoint, jsonBody, config.priority, config, callback);
+            var request = new QueuedRequest(endpoint, jsonBody, httpMethod, config.priority, config, callback);
             
             if (this._processedRequestIds.Contains(request.requestId))
             {
@@ -104,9 +106,20 @@ namespace GameNetworking.RequestOptimizer.Scripts.Core
                 return;
             }
             
-            if (config.canBatch && this.TryGetBatchingStrategy(endpoint, out var strategy))
+            if (config.canBatch)
             {
-                this.AddToBatch(request, strategy);
+                // Try get strategy by priority first, then by endpoint
+                IBatchingStrategy strategy = null;
+                
+                if (this._priorityBatchingStrategies.TryGetValue(config.priority, out strategy) ||
+                    this.TryGetBatchingStrategy(endpoint, out strategy))
+                {
+                    this.AddToBatch(request, strategy);
+                }
+                else
+                {
+                    this._requestQueue.Enqueue(request);
+                }
             }
             else
             {
@@ -125,6 +138,14 @@ namespace GameNetworking.RequestOptimizer.Scripts.Core
         public void RegisterBatchingStrategy(string endpoint, IBatchingStrategy strategy)
         {
             this._batchingStrategies[endpoint] = strategy;
+        }
+        
+        /// <summary>
+        /// Đăng ký batching strategy cho priority level
+        /// </summary>
+        public void RegisterPriorityBatchingStrategy(RequestPriority priority, IBatchingStrategy strategy)
+        {
+            this._priorityBatchingStrategies[priority] = strategy;
         }
         
         /// <summary>
@@ -229,7 +250,7 @@ namespace GameNetworking.RequestOptimizer.Scripts.Core
                     
                     foreach (var kvp in this._batchBuffers)
                     {
-                        var endpoint = kvp.Key;
+                        var batchKey = kvp.Key;
                         var batch = kvp.Value;
                         
                         if (batch.Count == 0)
@@ -237,24 +258,33 @@ namespace GameNetworking.RequestOptimizer.Scripts.Core
                             continue;
                         }
                         
-                        if (!this.TryGetBatchingStrategy(endpoint, out var strategy))
+                        // Get strategy từ batch's first request
+                        if (batch.Count > 0)
                         {
-                            continue;
-                        }
-                        
-                        var firstBatchTime = this._batchTimers[endpoint];
-                        
-                        if (strategy.ShouldSendBatch(batch, firstBatchTime))
-                        {
-                            batchesToSend.Add(endpoint);
+                            var firstRequest = batch[0];
+                            IBatchingStrategy strategy = null;
+                            
+                            // Try get by priority first, then by endpoint
+                            if (!this._priorityBatchingStrategies.TryGetValue(firstRequest.config.priority, out strategy) &&
+                                !this.TryGetBatchingStrategy(firstRequest.endpoint, out strategy))
+                            {
+                                continue;
+                            }
+                            
+                            var firstBatchTime = this._batchTimers[batchKey];
+                            
+                            if (strategy.ShouldSendBatch(batch, firstBatchTime))
+                            {
+                                batchesToSend.Add(batchKey);
+                            }
                         }
                     }
                     
-                    foreach (var endpoint in batchesToSend)
+                    foreach (var batchKey in batchesToSend)
                     {
                         if (this._rateLimiter.CanSendRequest())
                         {
-                            await this.SendBatchAsync(endpoint);
+                            await this.SendBatchAsync(batchKey);
                         }
                     }
                 }
@@ -339,45 +369,55 @@ namespace GameNetworking.RequestOptimizer.Scripts.Core
         
         private void AddToBatch(QueuedRequest request, IBatchingStrategy strategy)
         {
-            if (!this._batchBuffers.ContainsKey(request.endpoint))
+            // Tạo batch key dựa trên endpoint và priority để group requests có cùng đặc điểm
+            var batchKey = $"{request.endpoint}_{request.priority}";
+            
+            if (!this._batchBuffers.ContainsKey(batchKey))
             {
-                this._batchBuffers[request.endpoint] = new List<QueuedRequest>();
-                this._batchTimers[request.endpoint] = Time.realtimeSinceStartup;
+                this._batchBuffers[batchKey] = new List<QueuedRequest>();
+                this._batchTimers[batchKey] = Time.realtimeSinceStartup;
             }
             
-            var batch = this._batchBuffers[request.endpoint];
+            var batch = this._batchBuffers[batchKey];
             
             if (strategy.CanAddToBatch(request, batch))
             {
                 batch.Add(request);
-                Debug.Log($"[RequestQueueManager] Added to batch for {request.endpoint} (count: {batch.Count})");
+                Debug.Log($"[RequestQueueManager] Added to batch for {batchKey} (count: {batch.Count})");
             }
             else
             {
-                this.SendBatchAsync(request.endpoint).Forget();
+                this.SendBatchAsync(batchKey).Forget();
                 
-                this._batchBuffers[request.endpoint] = new List<QueuedRequest> { request };
-                this._batchTimers[request.endpoint] = Time.realtimeSinceStartup;
+                this._batchBuffers[batchKey] = new List<QueuedRequest> { request };
+                this._batchTimers[batchKey] = Time.realtimeSinceStartup;
             }
         }
         
-        private async UniTask SendBatchAsync(string endpoint)
+        private async UniTask SendBatchAsync(string batchKey)
         {
-            if (!this._batchBuffers.ContainsKey(endpoint) || this._batchBuffers[endpoint].Count == 0)
+            if (!this._batchBuffers.ContainsKey(batchKey) || this._batchBuffers[batchKey].Count == 0)
             {
                 return;
             }
             
-            if (!this.TryGetBatchingStrategy(endpoint, out var strategy))
+            var batch = this._batchBuffers[batchKey];
+            
+            // Get strategy từ batch's first request
+            IBatchingStrategy strategy = null;
+            var firstRequest = batch[0];
+            
+            if (!this._priorityBatchingStrategies.TryGetValue(firstRequest.config.priority, out strategy) &&
+                !this.TryGetBatchingStrategy(firstRequest.endpoint, out strategy))
             {
+                Debug.LogWarning($"[RequestQueueManager] No batching strategy found for batch key: {batchKey}");
                 return;
             }
             
-            var batch = this._batchBuffers[endpoint];
-            this._batchBuffers[endpoint] = new List<QueuedRequest>();
-            this._batchTimers[endpoint] = Time.realtimeSinceStartup;
+            this._batchBuffers[batchKey] = new List<QueuedRequest>();
+            this._batchTimers[batchKey] = Time.realtimeSinceStartup;
             
-            Debug.Log($"[RequestQueueManager] Sending batch of {batch.Count} requests to {endpoint}");
+            Debug.Log($"[RequestQueueManager] Sending batch of {batch.Count} requests (key: {batchKey}, endpoint: {firstRequest.endpoint})");
             
             var batchRequest = await strategy.CreateBatchRequestAsync(batch);
             

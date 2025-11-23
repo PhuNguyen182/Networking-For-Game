@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Threading;
 using Cysharp.Threading.Tasks;
 using GameNetworking.GameWebRequestService.Attributes;
+using GameNetworking.GameWebRequestService.BatchingStrategies;
 using GameNetworking.GameWebRequestService.Models;
 using GameNetworking.GameWebRequestService.Utilities;
 using GameNetworking.OnlineChecking;
@@ -177,10 +178,14 @@ namespace GameNetworking.GameWebRequestService.Core
                 // Determine request priority based on endpoint or type
                 var config = this.DetermineRequestConfig<TResponse>(url);
                 
+                // Serialize request body
+                var jsonBody = requestBody != null ? JsonConvert.SerializeObject(requestBody) : "{}";
+                
                 // Enqueue request với callback
-                this._queueManager.EnqueueRequest(
+                this._queueManager.EnqueueRequestRaw(
                     endpoint: url,
-                    data: requestBody,
+                    jsonBody: jsonBody,
+                    httpMethod: httpMethod,
                     config: config,
                     callback: (success, response) =>
                     {
@@ -422,14 +427,12 @@ namespace GameNetworking.GameWebRequestService.Core
             var offlineStorage = new JsonOfflineQueueStorage(OfflineQueueStoragePath, config.maxOfflineQueueSize,
                 this._requestConfigCollection);
             
-            // Setup default batching strategies
-            var batchingStrategies = new Dictionary<string, IBatchingStrategy>
-            {
-                // Strategy cho analytics endpoints
-                ["analytics"] = new TimeBasedBatchingStrategy(100, 5f, 2f),
-                ["telemetry"] = new AdaptiveBatchingStrategy(50, 5f, 1f, 10),
-                ["events"] = new SizeBasedBatchingStrategy(100, 10f, 80)
-            };
+            // Setup default batching strategies (endpoint-based)
+            var batchingStrategies = new Dictionary<string, IBatchingStrategy>();
+            
+            // Optional: Add custom strategies cho specific endpoints nếu cần
+            // batchingStrategies["analytics"] = new TimeBasedBatchingStrategy(100, 5f, 2f);
+            // batchingStrategies["telemetry"] = new AdaptiveBatchingStrategy(50, 5f, 1f, 10);
 
             // Create RequestQueueManager
             var queueManager = new RequestQueueManager(
@@ -442,9 +445,27 @@ namespace GameNetworking.GameWebRequestService.Core
                 batchingStrategies
             );
             
-            // Setup merging strategies cho position updates
-            // Note: Cần extend RequestQueueManager để support MergeManager
-            // Hoặc có thể implement trong custom batching strategy
+            // Setup priority-based batching strategies
+            // Automatic setup: Tìm tất cả priorities có canBatch = true trong RequestConfigCollection
+            // và tạo WebRequestBatchingStrategy cho chúng
+            foreach (var kvp in this._requestConfigCollection.GetAllRequestConfigs())
+            {
+                var priority = kvp.Key;
+                var requestConfig = kvp.Value;
+                
+                if (requestConfig.canBatch)
+                {
+                    // Sử dụng WebRequestBatchingStrategy cho mỗi priority level có batch enabled
+                    var strategy = new WebRequestBatchingStrategy(
+                        maxBatchingSize: requestConfig.maxBatchSize,
+                        maxBatchDelay: 2f // 2 seconds max delay
+                    );
+                    
+                    queueManager.RegisterPriorityBatchingStrategy(priority, strategy);
+                    
+                    Debug.Log($"[OptimizedWebRequestService] Setup batching for {priority} priority with max size {requestConfig.maxBatchSize}");
+                }
+            }
             
             return queueManager;
         }

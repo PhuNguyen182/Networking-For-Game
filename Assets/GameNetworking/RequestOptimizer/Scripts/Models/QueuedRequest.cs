@@ -11,6 +11,7 @@ namespace GameNetworking.RequestOptimizer.Scripts.Models
     {
         public string endpoint;
         public string jsonBody;
+        public string httpMethod; // GET, POST, PUT, DELETE, etc.
         public RequestPriority priority;
         public RequestConfig config;
         public float queuedTime;
@@ -18,11 +19,12 @@ namespace GameNetworking.RequestOptimizer.Scripts.Models
         public Action<bool, string> Callback;
         public string requestId;
         
-        public QueuedRequest(string endpoint, string body, RequestPriority priority, RequestConfig config,
+        public QueuedRequest(string endpoint, string body, string httpMethod, RequestPriority priority, RequestConfig config,
             Action<bool, string> callback = null)
         {
             this.endpoint = endpoint;
             this.jsonBody = body;
+            this.httpMethod = httpMethod ?? "POST"; // Default to POST
             this.priority = priority;
             this.config = config;
             this.queuedTime = UnityEngine.Time.realtimeSinceStartup;
@@ -34,11 +36,12 @@ namespace GameNetworking.RequestOptimizer.Scripts.Models
         /// <summary>
         /// Constructor cho deserialization từ offline storage
         /// </summary>
-        public QueuedRequest(string endpoint, string body, RequestPriority priority, RequestConfig config,
+        public QueuedRequest(string endpoint, string body, string httpMethod, RequestPriority priority, RequestConfig config,
             string requestId, float queuedTime, int retryCount)
         {
             this.endpoint = endpoint;
             this.jsonBody = body;
+            this.httpMethod = httpMethod ?? "POST";
             this.priority = priority;
             this.config = config;
             this.requestId = requestId;
@@ -55,6 +58,7 @@ namespace GameNetworking.RequestOptimizer.Scripts.Models
             return new QueuedRequest(
                 this.endpoint,
                 this.jsonBody,
+                this.httpMethod,
                 this.priority,
                 this.config,
                 this.requestId,

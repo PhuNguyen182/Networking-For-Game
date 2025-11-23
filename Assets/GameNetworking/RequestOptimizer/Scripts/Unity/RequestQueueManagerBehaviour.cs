@@ -99,7 +99,7 @@ namespace GameNetworking.RequestOptimizer.Scripts.Unity
         public void EnqueueRequest(string endpoint, object data, RequestConfig config,
             Action<bool, string> callback = null)
         {
-            this._requestQueueManager?.EnqueueRequest(endpoint, data, config, callback);
+            //this._requestQueueManager?.EnqueueRequest(endpoint, data, config, callback);
         }
         
         /// <summary>
@@ -108,7 +108,7 @@ namespace GameNetworking.RequestOptimizer.Scripts.Unity
         public void EnqueueRequestRaw(string endpoint, string jsonBody, RequestConfig config,
             Action<bool, string> callback = null)
         {
-            this._requestQueueManager?.EnqueueRequestRaw(endpoint, jsonBody, config, callback);
+            //this._requestQueueManager?.EnqueueRequestRaw(endpoint, jsonBody, config, callback);
         }
         
         /// <summary>

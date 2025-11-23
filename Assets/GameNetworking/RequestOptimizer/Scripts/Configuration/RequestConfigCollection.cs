@@ -19,5 +19,24 @@ namespace GameNetworking.RequestOptimizer.Scripts.Configuration
             
             return null;
         }
+        
+        /// <summary>
+        /// Lấy tất cả RequestConfig dưới dạng Dictionary theo Priority
+        /// </summary>
+        public Dictionary<RequestPriority, RequestConfig> GetAllRequestConfigs()
+        {
+            var result = new Dictionary<RequestPriority, RequestConfig>();
+            
+            for (int i = 0; i < this.requestConfigs.Count; i++)
+            {
+                var config = this.requestConfigs[i];
+                if (!result.ContainsKey(config.priority))
+                {
+                    result[config.priority] = config;
+                }
+            }
+            
+            return result;
+        }
     }
 }
