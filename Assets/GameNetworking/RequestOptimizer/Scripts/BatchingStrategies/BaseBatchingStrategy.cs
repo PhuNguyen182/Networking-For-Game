@@ -96,7 +96,8 @@ namespace GameNetworking.RequestOptimizer.Scripts.BatchingStrategies
         protected virtual bool AreRequestsCompatible(QueuedRequest request1, QueuedRequest request2)
         {
             return request1.endpoint == request2.endpoint &&
-                   request1.priority == request2.priority;
+                   request1.priority == request2.priority &&
+                   request1.httpMethod == request2.httpMethod; // CRITICAL: Same HTTP method
         }
         
         /// <summary>

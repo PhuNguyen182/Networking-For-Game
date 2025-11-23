@@ -97,13 +97,63 @@ namespace GameNetworking.RequestOptimizer.Scripts.Core
         {
             try
             {
-                // Sử dụng IHttpClient abstraction thay vì UnityWebRequest trực tiếp
-                var httpResponse = await this._httpClient.PostAsync(
-                    url: request.endpoint,
-                    jsonBody: request.jsonBody,
-                    headers: null,
-                    timeoutSeconds: 30
-                );
+                // Sử dụng correct HTTP method từ QueuedRequest
+                HttpClientResponse httpResponse;
+                
+                var httpMethod = request.httpMethod?.ToUpper() ?? "POST";
+                
+                switch (httpMethod)
+                {
+                    case "GET":
+                    {
+                        httpResponse = await this._httpClient.GetAsync(
+                            url: request.endpoint,
+                            headers: null,
+                            timeoutSeconds: 30
+                        );
+                        break;
+                    }
+                    case "POST":
+                    {
+                        httpResponse = await this._httpClient.PostAsync(
+                            url: request.endpoint,
+                            jsonBody: request.jsonBody,
+                            headers: null,
+                            timeoutSeconds: 30
+                        );
+                        break;
+                    }
+                    case "PUT":
+                    {
+                        httpResponse = await this._httpClient.PutAsync(
+                            url: request.endpoint,
+                            jsonBody: request.jsonBody,
+                            headers: null,
+                            timeoutSeconds: 30
+                        );
+                        break;
+                    }
+                    case "DELETE":
+                    {
+                        httpResponse = await this._httpClient.DeleteAsync(
+                            url: request.endpoint,
+                            headers: null,
+                            timeoutSeconds: 30
+                        );
+                        break;
+                    }
+                    default:
+                    {
+                        Debug.LogWarning($"[HttpRequestSender] Unknown HTTP method: {httpMethod}, defaulting to POST");
+                        httpResponse = await this._httpClient.PostAsync(
+                            url: request.endpoint,
+                            jsonBody: request.jsonBody,
+                            headers: null,
+                            timeoutSeconds: 30
+                        );
+                        break;
+                    }
+                }
                 
                 // Convert HttpClientResponse sang RequestResult
                 if (httpResponse.IsSuccess)

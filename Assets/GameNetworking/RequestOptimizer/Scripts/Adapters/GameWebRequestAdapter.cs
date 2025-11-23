@@ -125,6 +125,7 @@ namespace GameNetworking.RequestOptimizer.Scripts.Adapters
             {
                 // GameWebRequestService chưa có DeleteAsync, fallback to custom implementation
                 // Hoặc có thể extend IWebRequest để thêm DeleteAsync
+                await UniTask.CompletedTask;
                 return HttpClientResponse.Failure("DELETE not implemented", 501, HttpClientErrorType.Unknown);
             }
             catch (Exception ex)
@@ -141,7 +142,7 @@ namespace GameNetworking.RequestOptimizer.Scripts.Adapters
             }
             
             var statusCode = response.statusCode;
-            var isSuccess = statusCode >= 200 && statusCode < 300;
+            var isSuccess = statusCode is >= 200 and < 300;
             
             if (isSuccess)
             {
